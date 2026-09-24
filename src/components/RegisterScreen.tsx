@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User as UserIcon, Mail, Phone, Lock, Eye, EyeOff, FileText, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { User } from '../types';
 import { authErrorMessage, register } from '../auth/authApi';
+import { catalogsApi } from '../api/schedulingApi';
+import type { CatalogItem } from '../types';
 
 interface RegisterScreenProps {
   onRegisterSuccess: (user: User) => void;
@@ -19,10 +21,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [insurancePlanId, setInsurancePlanId] = useState('');
+  const [insurancePlans, setInsurancePlans] = useState<CatalogItem[]>([]);
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    catalogsApi.insurancePlans().then(setInsurancePlans).catch(() => setInsurancePlans([]));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +54,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
         email,
         phone,
         password,
+        ...(insurancePlanId ? { insurancePlanId } : {}),
       });
       onRegisterSuccess(user);
     } catch (error) {
@@ -335,6 +344,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
                     {showPassword ? <EyeOff className="h-4 w-4" strokeWidth={1.8} /> : <Eye className="h-4 w-4" strokeWidth={1.8} />}
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1.5" htmlFor="reg-insurance-plan">
+                  Plan de afiliación (opcional)
+                </label>
+                <select id="reg-insurance-plan" value={insurancePlanId} onChange={(event) => setInsurancePlanId(event.target.value)} className="input-transition block w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                  <option value="">Sin afiliación por ahora</option>
+                  {insurancePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+                </select>
               </div>
 
               {/* Consent checkbox */}
