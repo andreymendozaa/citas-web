@@ -25,6 +25,15 @@ describe('schedulingApi', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ professionalId: '2', startTime: '08:00' });
   });
 
+  it('lists only the authenticated user appointments with optional filters', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response([{ id: 17, status: 'APPROVED', professionalName: 'Dra. Ejemplo', specialtyName: 'Medicina General', locationName: 'HIC', startAt: '2026-10-01T08:00:00', durationMinutes: 30 }]));
+    vi.stubGlobal('fetch', fetchMock);
+    const { appointmentsApi } = await import('./schedulingApi');
+
+    await expect(appointmentsApi.mine({ status: 'APPROVED', date: '2026-10-01' })).resolves.toMatchObject([{ id: '17', status: 'APPROVED' }]);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8080/api/v1/appointments/mine?status=APPROVED&date=2026-10-01', expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-access-token' }) }));
+  });
+
   it('maps authorization and stale-slot errors to actionable messages', async () => {
     const { SchedulingApiError, schedulingErrorMessage } = await import('./schedulingApi');
 

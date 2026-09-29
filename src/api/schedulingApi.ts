@@ -21,6 +21,7 @@ export const appointmentsApi = {
     return [...professionals.values()];
   }),
   create: (input: { professionalId: string; locationId: string; specialtyId: string; date: string; startTime: string; reason?: string }) => request<ReservationResult>('/appointments', { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
+  mine: (filters: { status?: string; date?: string } = {}) => request<Appointment[]>(`/appointments/mine${query(filters)}`).then((items) => items.map(normalizedId)),
   pendingSpecialized: () => request<PendingAppointment[]>('/admin/appointments/pending-specialized').then((items) => items.map(normalizedId)),
   decide: (id: string, decision: 'APPROVE' | 'REJECT', reason?: string) => request<Appointment>(`/admin/appointments/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
 };

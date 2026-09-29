@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { adminApi, appointmentsApi, availabilityApi, catalogsApi } = vi.hoisted(() => ({
   adminApi: { specialties: vi.fn(), professionals: vi.fn(), createSpecialty: vi.fn(), updateSpecialty: vi.fn(), createProfessional: vi.fn(), assignSpecialties: vi.fn(), assignLocations: vi.fn(), setActive: vi.fn() },
-  appointmentsApi: { pendingSpecialized: vi.fn(), decide: vi.fn() },
+  appointmentsApi: { mine: vi.fn(), pendingSpecialized: vi.fn(), decide: vi.fn() },
   availabilityApi: { listMine: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   catalogsApi: { locations: vi.fn() },
 }));
@@ -17,7 +17,7 @@ describe('DashboardScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     catalogsApi.locations.mockResolvedValue([{ id: '1', name: 'Sede Norte' }]);
-    adminApi.specialties.mockResolvedValue([]); adminApi.professionals.mockResolvedValue([]); appointmentsApi.pendingSpecialized.mockResolvedValue([]);
+    adminApi.specialties.mockResolvedValue([]); adminApi.professionals.mockResolvedValue([]); appointmentsApi.mine.mockResolvedValue([]); appointmentsApi.pendingSpecialized.mockResolvedValue([]);
     availabilityApi.listMine.mockResolvedValue([]);
   });
 
@@ -39,5 +39,18 @@ describe('DashboardScreen', () => {
     expect(screen.getByRole('heading', { name: 'Editar bloque de disponibilidad' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('2026-10-10T08:00')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2026-10-10T09:00')).toBeInTheDocument();
+  });
+
+  it('muestra las citas propias y recarga al cambiar la versión de agenda', async () => {
+    appointmentsApi.mine.mockResolvedValue([{ id: '8', status: 'REJECTED', professionalName: 'Dr. Laboratorio', specialtyName: 'Cardiología Laboratorio', locationName: 'ICV', startAt: '2026-10-06T08:00:00', durationMinutes: 60, rejectionReason: 'Motivo sintético' }]);
+    const props = { user: { id: '3', name: 'Usuario', email: 'user@example.test', roles: ['USER'] }, onOpenBooking: vi.fn(), onLogout: vi.fn() };
+    const { rerender } = render(<DashboardScreen {...props} appointmentsVersion={0} />);
+
+    expect(await screen.findByText('Cardiología Laboratorio')).toBeInTheDocument();
+    expect(screen.getByText(/Motivo de rechazo: Motivo sintético/)).toBeInTheDocument();
+    expect(appointmentsApi.mine).toHaveBeenLastCalledWith({ status: undefined, date: undefined });
+
+    rerender(<DashboardScreen {...props} appointmentsVersion={1} />);
+    await vi.waitFor(() => expect(appointmentsApi.mine).toHaveBeenCalledTimes(2));
   });
 });
