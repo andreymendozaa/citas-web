@@ -1,0 +1,43 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { adminApi, appointmentsApi, availabilityApi, catalogsApi } = vi.hoisted(() => ({
+  adminApi: { specialties: vi.fn(), professionals: vi.fn(), createSpecialty: vi.fn(), updateSpecialty: vi.fn(), createProfessional: vi.fn(), assignSpecialties: vi.fn(), assignLocations: vi.fn(), setActive: vi.fn() },
+  appointmentsApi: { pendingSpecialized: vi.fn(), decide: vi.fn() },
+  availabilityApi: { listMine: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  catalogsApi: { locations: vi.fn() },
+}));
+
+vi.mock('../api/schedulingApi', () => ({ adminApi, appointmentsApi, availabilityApi, catalogsApi, schedulingErrorMessage: () => 'Error controlado' }));
+
+import { DashboardScreen } from './DashboardScreen';
+
+describe('DashboardScreen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    catalogsApi.locations.mockResolvedValue([{ id: '1', name: 'Sede Norte' }]);
+    adminApi.specialties.mockResolvedValue([]); adminApi.professionals.mockResolvedValue([]); appointmentsApi.pendingSpecialized.mockResolvedValue([]);
+    availabilityApi.listMine.mockResolvedValue([]);
+  });
+
+  it('muestra profesionales ADMIN sin exponer sus datos de acceso', async () => {
+    adminApi.professionals.mockResolvedValue([{ id: '7', name: 'Dra. Prueba', professionalCode: 'MED-7', licenseNumber: 'LIC-7', active: true, specialtyIds: ['2'], locationIds: ['1'] }]);
+    render(<DashboardScreen user={{ id: '1', name: 'Admin', email: 'admin@example.test', roles: ['ADMIN'] }} onOpenBooking={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByText('Dra. Prueba')).toBeInTheDocument();
+    expect(screen.queryByText(/@example\.test/)).not.toBeInTheDocument();
+  });
+
+  it('carga un bloque propio en el formulario de edición profesional', async () => {
+    const user = userEvent.setup();
+    availabilityApi.listMine.mockResolvedValue([{ id: '4', locationId: '1', date: '2026-10-10', start: '08:00:00', end: '09:00:00' }]);
+    render(<DashboardScreen user={{ id: '2', name: 'Profesional', email: 'professional@example.test', roles: ['PROFESSIONAL'] }} onOpenBooking={vi.fn()} onLogout={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }));
+
+    expect(screen.getByRole('heading', { name: 'Editar bloque de disponibilidad' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('2026-10-10T08:00')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('2026-10-10T09:00')).toBeInTheDocument();
+  });
+});

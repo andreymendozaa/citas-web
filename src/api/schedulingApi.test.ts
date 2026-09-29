@@ -41,4 +41,17 @@ describe('schedulingApi', () => {
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ locationId: '1', date: '2026-10-01', startTime: '08:00', endTime: '09:00' });
   });
+
+  it('groups the slot-level availability response by professional and normalizes numeric ids', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response([
+      { professionalId: 8, professionalName: 'Dra. López', startAt: '2026-10-01T08:00:00', endAt: '2026-10-01T08:30:00' },
+      { professionalId: 8, professionalName: 'Dra. López', startAt: '2026-10-01T08:30:00', endAt: '2026-10-01T09:00:00' },
+    ]));
+    vi.stubGlobal('fetch', fetchMock);
+    const { appointmentsApi } = await import('./schedulingApi');
+
+    await expect(appointmentsApi.availability({ locationId: '1', specialtyId: '2', date: '2026-10-01' })).resolves.toEqual([
+      { id: '8', name: 'Dra. López', slots: [{ startAt: '2026-10-01T08:00:00', endAt: '2026-10-01T08:30:00' }, { startAt: '2026-10-01T08:30:00', endAt: '2026-10-01T09:00:00' }] },
+    ]);
+  });
 });
