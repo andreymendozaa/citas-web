@@ -9,7 +9,7 @@ const { availability, createAppointment } = vi.hoisted(() => ({
 vi.mock('../api/schedulingApi', () => ({
   catalogsApi: {
     locations: () => Promise.resolve([{ id: '1', name: 'HIC' }]),
-    specialties: () => Promise.resolve([{ id: '2', code: 'GEN', name: 'Medicina General', durationMinutes: 30, general: true, active: true }]),
+    specialties: () => Promise.resolve([{ id: '2', code: 'GEN', name: 'Medicina General', durationMinutes: 30, general: true, active: true }, { id: '3', code: 'TEST', name: 'Especialidad de prueba UUID', durationMinutes: 30, active: false }]),
   },
   appointmentsApi: { availability, create: createAppointment },
   schedulingErrorMessage: (error: { status?: number }) => error.status === 409 ? 'El horario dejó de estar disponible. Selecciona otro horario.' : 'Error',
@@ -21,6 +21,8 @@ describe('BookAppointmentModal', () => {
   it('shows the 409 availability conflict in the booking form', async () => {
     render(<BookAppointmentModal isOpen onClose={vi.fn()} onAppointmentBooked={vi.fn()} />);
 
+    expect(await screen.findByRole('option', { name: /Medicina General/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Especialidad de prueba UUID/ })).not.toBeInTheDocument();
     fireEvent.change(await screen.findByLabelText('Sede'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Especialidad'), { target: { value: '2' } });
 
