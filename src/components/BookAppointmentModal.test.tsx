@@ -38,6 +38,8 @@ describe('BookAppointmentModal', () => {
 
     fireEvent.change(await screen.findByLabelText('Sede'), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText('Especialidad'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Fecha de atención'), { target: { value: '2026-10-01' } });
+    await vi.waitFor(() => expect(availability).toHaveBeenLastCalledWith({ locationId: '1', specialtyId: '2', date: '2026-10-01' }));
     await vi.waitFor(() => expect(screen.getByRole('button', { name: /Continuar/ })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /Continuar/ }));
     fireEvent.click(await screen.findByRole('button', { name: /Dra\. Ejemplo/ }));
