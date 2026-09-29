@@ -22,6 +22,8 @@ export const appointmentsApi = {
   }),
   create: (input: { professionalId: string; locationId: string; specialtyId: string; date: string; startTime: string; reason?: string }) => request<ReservationResult>('/appointments', { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
   mine: (filters: { status?: string; date?: string } = {}) => request<Appointment[]>(`/appointments/mine${query(filters)}`).then((items) => items.map(normalizedId)),
+  cancel: (id: string) => request<Appointment>(`/appointments/${id}/cancel`, { method: 'POST' }).then(normalizedId),
+  reschedule: (id: string, input: { locationId: string; date: string; startTime: string }) => request<{ id: string; status: string }>(`/appointments/${id}/reschedule`, { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
   pendingSpecialized: () => request<PendingAppointment[]>('/admin/appointments/pending-specialized').then((items) => items.map(normalizedId)),
   decide: (id: string, decision: 'APPROVE' | 'REJECT', reason?: string) => request<Appointment>(`/admin/appointments/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
 };
