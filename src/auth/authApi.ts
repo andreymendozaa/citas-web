@@ -70,7 +70,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
     throw new AuthApiError(response.status, problem?.detail ?? 'No fue posible completar la solicitud.');
   }
 
-  if (response.status === 204) return undefined as T;
+  if (response.status === 202 || response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -170,6 +170,33 @@ export async function logout(): Promise<void> {
 
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+export async function requestPasswordRecovery(email: string): Promise<void> {
+  await request<void>('/password-recovery', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string, confirmation: string): Promise<void> {
+  await request<void>('/password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ token: token.trim(), newPassword, confirmation }),
+  });
+}
+
+export function updateCachedUser(changes: Partial<User>): User | null {
+  const previous = cachedUser();
+  if (!previous) return null;
+  const user = { ...previous, ...changes };
+  saveUser(user, localStorage.getItem('portal_citas_user') !== null);
+  return user;
+}
+
+export function resetErrorMessage(error: unknown): string {
+  if (error instanceof AuthApiError && error.status === 400) return 'El código de recuperación no es válido, venció o ya fue usado, o las contraseñas no coinciden.';
+  return authErrorMessage(error);
 }
 
 export function authErrorMessage(error: unknown): string {

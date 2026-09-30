@@ -1,10 +1,11 @@
 import { getAccessToken } from '../auth/authApi';
-import type { Appointment, AvailabilityBlock, AvailableProfessional, CatalogItem, CreatedProfessional, PendingAppointment, Professional, ReservationResult, Specialty } from '../types';
+import type { Appointment, AvailabilityBlock, AvailableProfessional, CatalogItem, CreatedProfessional, Eps, EpsPlan, HistoryEntry, InboxItem, PendingAppointment, Professional, ProfessionalAppointment, Profile, ReservationResult, Specialty } from '../types';
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 export class SchedulingApiError extends Error { constructor(public readonly status: number, message: string) { super(message); this.name = 'SchedulingApiError'; } }
 function query(params: Record<string, string | undefined>): string { const entries = Object.entries(params).filter(([, value]) => value) as [string, string][]; return entries.length ? `?${new URLSearchParams(entries).toString()}` : ''; }
 function normalizedId<T extends { id: string | number }>(item: T): T { return { ...item, id: String(item.id) }; }
+function stringIds<T extends object>(...keys: (keyof T)[]) { return (item: T): T => { const copy = { ...item }; keys.forEach((key) => { if (copy[key] !== null && copy[key] !== undefined) (copy as Record<keyof T, unknown>)[key] = String(copy[key]); }); return copy; }; }
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAccessToken(); let response: Response;
   try { response = await fetch(`${API_URL}/api/v1${path}`, { ...init, credentials: 'include', headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init.headers } }); }
@@ -12,7 +13,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) { const problem = await response.json().catch(() => null) as { detail?: string } | null; throw new SchedulingApiError(response.status, problem?.detail ?? 'No fue posible completar la solicitud.'); }
   if (response.status === 204) return undefined as T; return response.json() as Promise<T>;
 }
-export const catalogsApi = { locations: () => request<CatalogItem[]>('/catalogs/locations').then((items) => items.map(normalizedId)), insurancePlans: () => request<CatalogItem[]>('/catalogs/plans').then((items) => items.map(normalizedId)), specialties: () => request<Specialty[]>('/specialties').then((items) => items.map(normalizedId)) };
+export const catalogsApi = { locations: () => request<CatalogItem[]>('/catalogs/locations').then((items) => items.map(normalizedId)), insurancePlans: () => request<CatalogItem[]>('/catalogs/plans').then((items) => items.map(normalizedId)), specialties: () => request<Specialty[]>('/specialties').then((items) => items.map(normalizedId)), regimes: () => request<CatalogItem[]>('/catalogs/regimes').then((items) => items.map(normalizedId)) };
 type AvailableResponse = { professionalId: string | number; professionalName: string; startAt: string; endAt: string };
 export const appointmentsApi = {
   availability: (filters: { locationId: string; specialtyId: string; professionalId?: string; date: string }) => request<AvailableResponse[]>(`/availability${query(filters)}`).then((rows) => {
@@ -26,6 +27,17 @@ export const appointmentsApi = {
   reschedule: (id: string, input: { locationId: string; date: string; startTime: string }) => request<{ id: string; status: string }>(`/appointments/${id}/reschedule`, { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
   pendingSpecialized: () => request<PendingAppointment[]>('/admin/appointments/pending-specialized').then((items) => items.map(normalizedId)),
   decide: (id: string, decision: 'APPROVE' | 'REJECT', reason?: string) => request<Appointment>(`/admin/appointments/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
+  decideReschedule: (id: string, decision: 'APPROVE' | 'REJECT', reason?: string) => request<unknown>(`/admin/reschedule-requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
+  inbox: (filters: { locationId?: string; professionalId?: string; specialtyId?: string; date?: string } = {}) => request<InboxItem[]>(`/admin/inbox${query(filters)}`).then((items) => items.map(stringIds<InboxItem>('id', 'appointmentId', 'locationId'))),
+  history: (id: string) => request<HistoryEntry[]>(`/appointments/${id}/history`).then((items) => items.map(stringIds<HistoryEntry>('id', 'changedByUserId'))),
+};
+export const profileApi = {
+  me: () => request<Profile>('/users/me').then(normalizedId),
+  updatePhone: (phone: string) => request<Profile>('/users/me', { method: 'PATCH', body: JSON.stringify({ phone }) }).then(normalizedId),
+};
+export const professionalApi = {
+  agenda: (filters: { from?: string; to?: string; locationId?: string } = {}) => request<ProfessionalAppointment[]>(`/professional/appointments${query(filters)}`).then((items) => items.map(stringIds<ProfessionalAppointment>('id', 'specialtyId', 'locationId'))),
+  close: (id: string, result: 'COMPLETED' | 'NO_SHOW', reason?: string) => request<Appointment>(`/professional/appointments/${id}/closure`, { method: 'POST', body: JSON.stringify({ result, reason: reason || undefined }) }),
 };
 export const adminApi = {
   specialties: () => request<Specialty[]>('/admin/specialties'), createSpecialty: (input: { code: string; name: string; durationMinutes: 30 | 60; general: boolean }) => request<Specialty>('/admin/specialties', { method: 'POST', body: JSON.stringify(input) }),
@@ -34,10 +46,16 @@ export const adminApi = {
   createProfessional: (input: { firstName: string; lastName: string; documentType: string; documentNumber: string; email: string; phone: string; temporaryPassword: string; professionalCode: string; licenseNumber: string }) => request<CreatedProfessional>('/admin/professionals', { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
   assignSpecialties: (id: string, specialtyIds: string[], primarySpecialtyId: string) => request<void>(`/admin/professionals/${id}/specialties`, { method: 'PUT', body: JSON.stringify({ specialtyIds, primarySpecialtyId }) }),
   assignLocations: (id: string, locationIds: string[]) => request<void>(`/admin/professionals/${id}/locations`, { method: 'PUT', body: JSON.stringify({ locationIds }) }), setActive: (id: string, active: boolean) => request<Professional>(`/admin/professionals/${id}/active`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+  eps: () => request<Eps[]>('/admin/eps').then((items) => items.map(normalizedId)),
+  createEps: (input: { code: string; name: string }) => request<Eps>('/admin/eps', { method: 'POST', body: JSON.stringify(input) }).then(normalizedId),
+  updateEps: (id: string, input: Partial<{ name: string; active: boolean }>) => request<Eps>(`/admin/eps/${id}`, { method: 'PATCH', body: JSON.stringify(input) }).then(normalizedId),
+  epsPlans: (epsId?: string) => request<EpsPlan[]>(`/admin/eps-plans${query({ epsId })}`).then((items) => items.map(stringIds<EpsPlan>('id', 'epsId', 'regimeId'))),
+  createEpsPlan: (input: { epsId: string; regimeId: string; code: string; name: string }) => request<EpsPlan>('/admin/eps-plans', { method: 'POST', body: JSON.stringify(input) }).then(stringIds<EpsPlan>('id', 'epsId', 'regimeId')),
+  updateEpsPlan: (id: string, input: Partial<{ name: string; active: boolean }>) => request<EpsPlan>(`/admin/eps-plans/${id}`, { method: 'PATCH', body: JSON.stringify(input) }).then(stringIds<EpsPlan>('id', 'epsId', 'regimeId')),
 };
 export const availabilityApi = {
   listMine: (date?: string, locationId?: string) => request<AvailabilityBlock[]>(`/professional/availability-blocks${query({ date, locationId })}`).then((items) => items.map((item) => ({ ...normalizedId(item), locationId: String(item.locationId) }))),
   create: (input: { locationId: string; date: string; startTime: string; endTime: string }) => request<AvailabilityBlock>('/professional/availability-blocks', { method: 'POST', body: JSON.stringify(input) }).then((item) => ({ ...normalizedId(item), locationId: String(item.locationId) })),
   update: (id: string, input: Partial<{ locationId: string; date: string; startTime: string; endTime: string }>) => request<AvailabilityBlock>(`/professional/availability-blocks/${id}`, { method: 'PATCH', body: JSON.stringify(input) }).then((item) => ({ ...normalizedId(item), locationId: String(item.locationId) })), remove: (id: string) => request<void>(`/professional/availability-blocks/${id}`, { method: 'DELETE' }),
 };
-export function schedulingErrorMessage(error: unknown): string { if (!(error instanceof SchedulingApiError)) return 'Ocurrió un error inesperado.'; if (error.status === 401) return 'Tu sesión venció. Inicia sesión nuevamente.'; if (error.status === 403) return 'No tienes permiso para realizar esta acción.'; if (error.status === 404) return 'El recurso solicitado no está disponible.'; if (error.status === 409) return 'El horario dejó de estar disponible. Selecciona otro horario.'; if (error.status === 400) return 'Revisa los datos ingresados.'; return error.message; }
+export function schedulingErrorMessage(error: unknown, conflictMessage = 'El horario dejó de estar disponible. Selecciona otro horario.'): string { if (!(error instanceof SchedulingApiError)) return 'Ocurrió un error inesperado.'; if (error.status === 401) return 'Tu sesión venció. Inicia sesión nuevamente.'; if (error.status === 403) return 'No tienes permiso para realizar esta acción.'; if (error.status === 404) return 'El recurso solicitado no está disponible.'; if (error.status === 409) return conflictMessage; if (error.status === 400) return 'Revisa los datos ingresados.'; return error.message; }

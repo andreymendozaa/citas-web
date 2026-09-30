@@ -103,4 +103,26 @@ describe('authApi', () => {
     }));
     expect(localStorage.getItem('portal_citas_user')).toBeNull();
   });
+
+  it('solicita recuperación aceptando el 202 sin cuerpo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await import('./authApi');
+
+    await expect(auth.requestPasswordRecovery(' Ana@Example.com ')).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/v1/auth/password-recovery');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ email: 'ana@example.com' });
+  });
+
+  it('envía el restablecimiento y traduce el 400 sin revelar la causa exacta', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ detail: 'Token de recuperación inválido o expirado' }, 400));
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await import('./authApi');
+
+    const error = await auth.resetPassword(' abc ', 'Nueva123*', 'Nueva123*').catch((cause: unknown) => cause);
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ token: 'abc', newPassword: 'Nueva123*', confirmation: 'Nueva123*' });
+    expect(auth.resetErrorMessage(error)).toContain('no es válido');
+  });
 });
