@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { adminApi, appointmentsApi, availabilityApi, catalogsApi, professionalApi, profileApi } = vi.hoisted(() => ({
   adminApi: { specialties: vi.fn(), professionals: vi.fn(), createSpecialty: vi.fn(), updateSpecialty: vi.fn(), createProfessional: vi.fn(), assignSpecialties: vi.fn(), assignLocations: vi.fn(), setActive: vi.fn() },
-  appointmentsApi: { mine: vi.fn(), inbox: vi.fn(), decide: vi.fn(), decideReschedule: vi.fn(), history: vi.fn() },
+  appointmentsApi: { mine: vi.fn(), inbox: vi.fn(), decide: vi.fn(), decideReschedule: vi.fn(), history: vi.fn(), cancel: vi.fn(), reschedule: vi.fn(), availability: vi.fn() },
   availabilityApi: { listMine: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   catalogsApi: { locations: vi.fn() },
   professionalApi: { agenda: vi.fn(), close: vi.fn() },
@@ -59,6 +59,56 @@ describe('DashboardScreen', () => {
 
     rerender(<DashboardScreen {...props} appointmentsVersion={1} />);
     await vi.waitFor(() => expect(appointmentsApi.mine).toHaveBeenCalledTimes(2));
+  });
+
+  const futureApproved = { id: '21', status: 'APPROVED', professionalId: '7', specialtyId: '2', locationId: '1', professionalName: 'Dr. Laboratorio', specialtyName: 'Medicina General', locationName: 'HIC', startAt: '2099-01-01T08:00:00', durationMinutes: 30 };
+  const userProps = { user: { id: '3', name: 'Usuario', email: 'user@example.test', roles: ['USER'] }, onOpenBooking: vi.fn(), onLogout: vi.fn() };
+
+  it('HU-026 cancela una cita propia tras confirmar y recarga la lista', async () => {
+    const user = userEvent.setup(); const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    appointmentsApi.mine.mockResolvedValue([futureApproved]); appointmentsApi.cancel.mockResolvedValue({ id: '21', status: 'CANCELLED' });
+    render(<DashboardScreen {...userProps} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar cita' }));
+
+    expect(confirm).toHaveBeenCalled();
+    expect(appointmentsApi.cancel).toHaveBeenCalledWith('21');
+    await vi.waitFor(() => expect(appointmentsApi.mine).toHaveBeenCalledTimes(2));
+    confirm.mockRestore();
+  });
+
+  it('HU-026 no cancela si el usuario no confirma', async () => {
+    const user = userEvent.setup(); const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    appointmentsApi.mine.mockResolvedValue([futureApproved]);
+    render(<DashboardScreen {...userProps} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar cita' }));
+
+    expect(appointmentsApi.cancel).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('HU-027 solicita reprogramación con el mismo profesional y la nueva franja', async () => {
+    const user = userEvent.setup();
+    appointmentsApi.mine.mockResolvedValue([futureApproved]);
+    appointmentsApi.availability.mockResolvedValue([{ id: '7', name: 'Dr. Laboratorio', slots: [{ startAt: '2099-01-02T10:00:00', endAt: '2099-01-02T10:30:00' }] }]);
+    appointmentsApi.reschedule.mockResolvedValue({ id: '5', status: 'PENDING' });
+    render(<DashboardScreen {...userProps} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Reprogramar' }));
+    await user.click(screen.getByRole('button', { name: 'Consultar horarios' }));
+    expect(appointmentsApi.availability).toHaveBeenCalledWith(expect.objectContaining({ locationId: '1', specialtyId: '2', professionalId: '7' }));
+    await user.click(await screen.findByRole('button', { name: /10:00/ }));
+
+    expect(appointmentsApi.reschedule).toHaveBeenCalledWith('21', { locationId: '1', date: '2099-01-02', startTime: '10:00' });
+    await vi.waitFor(() => expect(appointmentsApi.mine).toHaveBeenCalledTimes(2));
+  });
+
+  it('HU-027 bloquea una segunda reprogramación mientras hay una pendiente', async () => {
+    appointmentsApi.mine.mockResolvedValue([{ ...futureApproved, rescheduleStatus: 'PENDING' }]);
+    render(<DashboardScreen {...userProps} />);
+
+    expect(await screen.findByRole('button', { name: 'Reprogramación pendiente' })).toBeDisabled();
   });
 
   it('muestra solo las pestañas del rol autenticado', () => {
