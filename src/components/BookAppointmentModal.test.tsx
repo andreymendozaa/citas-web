@@ -9,7 +9,7 @@ const { availability, createAppointment } = vi.hoisted(() => ({
 vi.mock('../api/schedulingApi', () => ({
   catalogsApi: {
     locations: () => Promise.resolve([{ id: '1', name: 'HIC' }]),
-    specialties: () => Promise.resolve([{ id: '2', code: 'GEN', name: 'Medicina General', durationMinutes: 30, general: true, active: true }, { id: '3', code: 'TEST', name: 'Especialidad de prueba UUID', durationMinutes: 30, active: false }]),
+    specialties: () => Promise.resolve([{ id: '2', code: 'GEN', name: 'Medicina General', durationMinutes: 30, general: true, active: true }, { id: '3', code: 'TEST', name: 'Especialidad de prueba UUID', durationMinutes: 30, active: false }, { id: '4', code: 'CAR', name: 'Cardiología', durationMinutes: 60, general: false, active: true }]),
   },
   appointmentsApi: { availability, create: createAppointment },
   schedulingErrorMessage: (error: { status?: number }) => error.status === 409 ? 'El horario dejó de estar disponible. Selecciona otro horario.' : 'Error',
@@ -28,6 +28,25 @@ describe('BookAppointmentModal', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El horario dejó de estar disponible');
     expect(availability).toHaveBeenCalledWith(expect.objectContaining({ locationId: '1', specialtyId: '2' }));
+  });
+
+  it('HU-021 filters specialties by general/specialized appointment type', async () => {
+    render(<BookAppointmentModal isOpen onClose={vi.fn()} onAppointmentBooked={vi.fn()} />);
+    const specialty = await screen.findByLabelText('Especialidad');
+    await screen.findByRole('option', { name: /Cardiología/ });
+    expect(screen.getByRole('option', { name: /Medicina General/ })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Tipo de cita'), { target: { value: 'GENERAL' } });
+    expect(screen.getByRole('option', { name: /Medicina General/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Cardiología/ })).not.toBeInTheDocument();
+    fireEvent.change(specialty, { target: { value: '2' } });
+    expect(specialty).toHaveValue('2');
+
+    // switching to specialized drops the general specialty that no longer matches
+    fireEvent.change(screen.getByLabelText('Tipo de cita'), { target: { value: 'SPECIALIZED' } });
+    expect(screen.getByRole('option', { name: /Cardiología/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Medicina General/ })).not.toBeInTheDocument();
+    expect(specialty).toHaveValue('');
   });
 
   it('confirms an approved reservation with the selected scheduling details', async () => {

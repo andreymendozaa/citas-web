@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -59,6 +59,46 @@ describe('DashboardScreen', () => {
 
     rerender(<DashboardScreen {...props} appointmentsVersion={1} />);
     await vi.waitFor(() => expect(appointmentsApi.mine).toHaveBeenCalledTimes(2));
+  });
+
+  const adminProps = { user: { id: '1', name: 'Admin', email: 'admin@example.test', roles: ['ADMIN'] }, onOpenBooking: vi.fn(), onLogout: vi.fn() };
+  const offer = [{ id: '2', name: 'Medicina General', durationMinutes: 30, general: true, active: true }, { id: '4', name: 'Cardiología', durationMinutes: 60, general: false, active: true }];
+
+  it('HU-016 crea un profesional con la especialidad primaria elegida explícitamente', async () => {
+    const user = userEvent.setup();
+    adminApi.specialties.mockResolvedValue(offer); adminApi.createProfessional.mockResolvedValue({ id: '50' }); adminApi.assignSpecialties.mockResolvedValue(undefined); adminApi.assignLocations.mockResolvedValue(undefined);
+    render(<DashboardScreen {...adminProps} />);
+    await user.click(screen.getByRole('tab', { name: 'Oferta' }));
+
+    for (const [placeholder, value] of [['Nombres', 'Nora'], ['Apellidos', 'Nueva'], ['Documento sintético', 'DOC-1'], ['Correo', 'nora@example.test'], ['Teléfono', '3000000000'], ['Contraseña temporal', 'Temporal123*'], ['Código profesional', 'MED-50'], ['Matrícula sintética', 'LIC-50']]) await user.type(await screen.findByPlaceholderText(placeholder), value);
+    await user.click(await screen.findByRole('checkbox', { name: 'Medicina General' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Cardiología' }));
+    await user.selectOptions(screen.getByLabelText('Especialidad primaria'), '4');
+    await user.click(screen.getByRole('checkbox', { name: 'Sede Norte' }));
+    await user.click(screen.getByRole('button', { name: 'Crear y asignar profesional' }));
+
+    await vi.waitFor(() => expect(adminApi.assignSpecialties).toHaveBeenCalledWith('50', ['2', '4'], '4'));
+    expect(adminApi.assignLocations).toHaveBeenCalledWith('50', ['1']);
+  });
+
+  it('HU-016 muestra la primaria y reasigna especialidades y sedes de un profesional existente', async () => {
+    const user = userEvent.setup();
+    adminApi.specialties.mockResolvedValue(offer); adminApi.assignSpecialties.mockResolvedValue(undefined); adminApi.assignLocations.mockResolvedValue(undefined);
+    adminApi.professionals.mockResolvedValue([{ id: '7', name: 'Dra. Prueba', professionalCode: 'MED-7', licenseNumber: 'LIC-7', active: true, specialtyIds: ['2', '4'], locationIds: ['1'], primarySpecialtyId: '2' }]);
+    render(<DashboardScreen {...adminProps} />);
+    await user.click(screen.getByRole('tab', { name: 'Oferta' }));
+
+    expect(await screen.findByText(/★ Medicina General, Cardiología/)).toBeInTheDocument();
+    expect(screen.getByText(/sedes: Sede Norte/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Editar asignaciones' }));
+    const editor = within(screen.getByLabelText('Asignaciones de Dra. Prueba'));
+    expect(editor.getByLabelText('Especialidad primaria')).toHaveValue('2');
+    await user.selectOptions(editor.getByLabelText('Especialidad primaria'), '4');
+    await user.click(editor.getByRole('button', { name: 'Guardar asignaciones' }));
+
+    await vi.waitFor(() => expect(adminApi.assignSpecialties).toHaveBeenCalledWith('7', ['2', '4'], '4'));
+    expect(adminApi.assignLocations).toHaveBeenCalledWith('7', ['1']);
+    await vi.waitFor(() => expect(adminApi.professionals).toHaveBeenCalledTimes(3)); // inbox + offer load + reload after save
   });
 
   const futureApproved = { id: '21', status: 'APPROVED', professionalId: '7', specialtyId: '2', locationId: '1', professionalName: 'Dr. Laboratorio', specialtyName: 'Medicina General', locationName: 'HIC', startAt: '2099-01-01T08:00:00', durationMinutes: 30 };
