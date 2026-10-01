@@ -62,6 +62,20 @@ describe('schedulingApi', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ phone: '3009999999' });
   });
 
+  it('reads a missing affiliation as null and changes it with only the plan id', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(response({ planId: 11, planCode: 'PC', planName: 'Plan', epsId: 5, epsName: 'EPS', regimeId: 3, regimeName: 'Contributivo', membershipNumber: 'AUTO-3-11' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { profileApi } = await import('./schedulingApi');
+
+    await expect(profileApi.affiliation()).resolves.toBeNull();
+    await expect(profileApi.changeAffiliation('11')).resolves.toMatchObject({ planId: '11', epsId: '5', regimeId: '3' });
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/api/v1/users/me/affiliation');
+    expect(fetchMock.mock.calls[1][1].method).toBe('PUT');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({ planId: '11' });
+  });
+
   it('queries the professional agenda and closes with the closure contract', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response([{ id: 5, patientName: 'Paciente', specialtyId: 2, specialtyName: 'Medicina', locationId: 1, locationName: 'HIC', startAt: '2026-10-01T08:00:00', endAt: '2026-10-01T08:30:00', durationMinutes: 30, reason: null }]))

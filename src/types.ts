@@ -15,6 +15,8 @@ export interface PendingAppointment { id: string; patientName: string; professio
 export interface AvailabilityBlock { id: string; locationId: string; date: string; start: string; end: string; }
 export interface Profile { id: string; firstName: string; lastName: string; documentType: string; documentNumber: string; email: string; phone: string; roles: string[]; }
 export interface Eps { id: string; code: string; name: string; active: boolean; }
+export interface Affiliation { planId: string; planCode: string; planName: string; epsId: string; epsName: string; regimeId: string; regimeName: string; membershipNumber: string; }
+export interface InsurancePlan extends CatalogItem { epsId: string; regimeId: string; }
 export interface EpsPlan { id: string; epsId: string; regimeId: string; code: string; name: string; active: boolean; }
 export interface ProfessionalAppointment { id: string; patientName: string; specialtyId: string; specialtyName: string; locationId: string; locationName: string; startAt: string; endAt: string; durationMinutes: number; reason?: string | null; }
 export type InboxType = 'SPECIALIZED' | 'RESCHEDULE';

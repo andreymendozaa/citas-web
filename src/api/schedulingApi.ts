@@ -1,5 +1,5 @@
 import { getAccessToken } from '../auth/authApi';
-import type { Appointment, AvailabilityBlock, AvailableProfessional, CatalogItem, CreatedProfessional, Eps, EpsPlan, HistoryEntry, InboxItem, PendingAppointment, Professional, ProfessionalAppointment, Profile, ReservationResult, Specialty } from '../types';
+import type { Affiliation, Appointment, AvailabilityBlock, InsurancePlan, AvailableProfessional, CatalogItem, CreatedProfessional, Eps, EpsPlan, HistoryEntry, InboxItem, PendingAppointment, Professional, ProfessionalAppointment, Profile, ReservationResult, Specialty } from '../types';
 
 const API_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 export class SchedulingApiError extends Error { constructor(public readonly status: number, message: string) { super(message); this.name = 'SchedulingApiError'; } }
@@ -13,7 +13,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) { const problem = await response.json().catch(() => null) as { detail?: string } | null; throw new SchedulingApiError(response.status, problem?.detail ?? 'No fue posible completar la solicitud.'); }
   if (response.status === 204) return undefined as T; return response.json() as Promise<T>;
 }
-export const catalogsApi = { locations: () => request<CatalogItem[]>('/catalogs/locations').then((items) => items.map(normalizedId)), insurancePlans: () => request<CatalogItem[]>('/catalogs/plans').then((items) => items.map(normalizedId)), specialties: () => request<Specialty[]>('/specialties').then((items) => items.map(normalizedId)), regimes: () => request<CatalogItem[]>('/catalogs/regimes').then((items) => items.map(normalizedId)) };
+export const catalogsApi = { locations: () => request<CatalogItem[]>('/catalogs/locations').then((items) => items.map(normalizedId)), insurancePlans: () => request<CatalogItem[]>('/catalogs/plans').then((items) => items.map(normalizedId)), specialties: () => request<Specialty[]>('/specialties').then((items) => items.map(normalizedId)), regimes: () => request<CatalogItem[]>('/catalogs/regimes').then((items) => items.map(normalizedId)), selectablePlans: () => request<InsurancePlan[]>('/catalogs/plans').then((items) => items.map(stringIds<InsurancePlan>('id', 'epsId', 'regimeId'))), eps: () => request<CatalogItem[]>('/eps').then((items) => items.map(normalizedId)) };
 type AvailableResponse = { professionalId: string | number; professionalName: string; startAt: string; endAt: string };
 export const appointmentsApi = {
   availability: (filters: { locationId: string; specialtyId: string; professionalId?: string; date: string }) => request<AvailableResponse[]>(`/availability${query(filters)}`).then((rows) => {
@@ -34,6 +34,8 @@ export const appointmentsApi = {
 export const profileApi = {
   me: () => request<Profile>('/users/me').then(normalizedId),
   updatePhone: (phone: string) => request<Profile>('/users/me', { method: 'PATCH', body: JSON.stringify({ phone }) }).then(normalizedId),
+  affiliation: () => request<Affiliation | undefined>('/users/me/affiliation').then((item) => item ? stringIds<Affiliation>('planId', 'epsId', 'regimeId')(item) : null),
+  changeAffiliation: (planId: string) => request<Affiliation>('/users/me/affiliation', { method: 'PUT', body: JSON.stringify({ planId }) }).then(stringIds<Affiliation>('planId', 'epsId', 'regimeId')),
 };
 export const professionalApi = {
   agenda: (filters: { from?: string; to?: string; locationId?: string } = {}) => request<ProfessionalAppointment[]>(`/professional/appointments${query(filters)}`).then((items) => items.map(stringIds<ProfessionalAppointment>('id', 'specialtyId', 'locationId'))),

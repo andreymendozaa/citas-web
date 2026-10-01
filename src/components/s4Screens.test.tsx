@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { adminApi, appointmentsApi, catalogsApi, professionalApi, profileApi, auth } = vi.hoisted(() => ({
   adminApi: { specialties: vi.fn(), professionals: vi.fn(), eps: vi.fn(), createEps: vi.fn(), updateEps: vi.fn(), epsPlans: vi.fn(), createEpsPlan: vi.fn(), updateEpsPlan: vi.fn() },
   appointmentsApi: { inbox: vi.fn(), decide: vi.fn(), decideReschedule: vi.fn(), history: vi.fn() },
-  catalogsApi: { locations: vi.fn(), regimes: vi.fn() },
+  catalogsApi: { locations: vi.fn(), regimes: vi.fn(), selectablePlans: vi.fn(), eps: vi.fn() },
   professionalApi: { agenda: vi.fn(), close: vi.fn() },
-  profileApi: { me: vi.fn(), updatePhone: vi.fn() },
+  profileApi: { me: vi.fn(), updatePhone: vi.fn(), affiliation: vi.fn(), changeAffiliation: vi.fn() },
   auth: { requestPasswordRecovery: vi.fn(), resetPassword: vi.fn(), updateCachedUser: vi.fn(), authErrorMessage: () => 'Error de acceso', resetErrorMessage: () => 'Código inválido' },
 }));
 
@@ -31,6 +31,46 @@ describe('pantallas S4', () => {
     catalogsApi.locations.mockResolvedValue([{ id: '1', name: 'HIC' }]); catalogsApi.regimes.mockResolvedValue([{ id: '3', name: 'Contributivo' }]);
     adminApi.specialties.mockResolvedValue([]); adminApi.professionals.mockResolvedValue([]); adminApi.eps.mockResolvedValue([]); adminApi.epsPlans.mockResolvedValue([]);
     professionalApi.agenda.mockResolvedValue([]); appointmentsApi.inbox.mockResolvedValue([]);
+    profileApi.affiliation.mockResolvedValue(null);
+    catalogsApi.selectablePlans.mockResolvedValue([{ id: '11', name: 'Plan Contributivo', epsId: '5', regimeId: '3' }, { id: '12', name: 'Plan Subsidiado', epsId: '5', regimeId: '4' }]);
+    catalogsApi.eps.mockResolvedValue([{ id: '5', name: 'EPS Sintética' }]);
+    catalogsApi.regimes.mockResolvedValue([{ id: '3', name: 'Contributivo' }, { id: '4', name: 'Subsidiado' }]);
+  });
+
+  const baseProfile = { id: '3', firstName: 'Ana', lastName: 'Ruiz', documentType: 'CC', documentNumber: '900', email: 'ana@example.test', phone: '3001111111', roles: ['USER'] };
+
+  it('HU-011 asocia un plan cuando el usuario no tiene afiliación', async () => {
+    const user = userEvent.setup();
+    profileApi.me.mockResolvedValue(baseProfile);
+    profileApi.changeAffiliation.mockResolvedValue({ planId: '11', planCode: 'PC', planName: 'Plan Contributivo', epsId: '5', epsName: 'EPS Sintética', regimeId: '3', regimeName: 'Contributivo', membershipNumber: 'AUTO-3-11' });
+    render(<ProfileTab />);
+
+    expect(await screen.findByText(/No tienes una afiliación registrada/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'EPS Sintética — Plan Contributivo (Contributivo)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar afiliación' })).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText('Plan de afiliación'), '11');
+    await user.click(screen.getByRole('button', { name: 'Guardar afiliación' }));
+
+    expect(profileApi.changeAffiliation).toHaveBeenCalledWith('11');
+    expect(await screen.findByText('Afiliación actualizada.')).toBeInTheDocument();
+    expect(screen.getByText('Plan Contributivo', { selector: 'dd' })).toBeInTheDocument();
+  });
+
+  it('HU-011 muestra la afiliación vigente y no permite guardar el mismo plan', async () => {
+    const user = userEvent.setup();
+    profileApi.me.mockResolvedValue(baseProfile);
+    profileApi.affiliation.mockResolvedValue({ planId: '11', planCode: 'PC', planName: 'Plan Contributivo', epsId: '5', epsName: 'EPS Sintética', regimeId: '3', regimeName: 'Contributivo', membershipNumber: 'AUTO-3-11' });
+    profileApi.changeAffiliation.mockRejectedValue(new SchedulingApiError(409, 'El plan ya es tu afiliación vigente'));
+    render(<ProfileTab />);
+
+    expect(await screen.findByText('EPS Sintética', { selector: 'dd' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Plan de afiliación')).toHaveValue('11');
+    expect(screen.getByRole('button', { name: 'Guardar afiliación' })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText('Plan de afiliación'), '12');
+    await user.click(screen.getByRole('button', { name: 'Guardar afiliación' }));
+    expect(profileApi.changeAffiliation).toHaveBeenCalledWith('12');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ese plan ya es tu afiliación vigente.');
   });
 
   it('HU-008 responde con un mensaje neutral exista o no la cuenta', async () => {

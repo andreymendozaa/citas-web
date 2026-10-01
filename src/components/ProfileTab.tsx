@@ -3,6 +3,7 @@ import { Phone, UserRound } from 'lucide-react';
 import { profileApi, schedulingErrorMessage } from '../api/schedulingApi';
 import { updateCachedUser } from '../auth/authApi';
 import type { Profile, User } from '../types';
+import { AffiliationSection } from './AffiliationSection';
 
 /** Own profile (HU-010): identity data is read-only; only the phone can change. */
 export function ProfileTab({ onUserChange }: { onUserChange?: (user: User) => void }) {
@@ -21,6 +22,7 @@ export function ProfileTab({ onUserChange }: { onUserChange?: (user: User) => vo
         <div className="p-3 bg-slate-50 rounded-xl sm:col-span-2"><dt className="text-xs text-slate-500">Correo electrónico</dt><dd className="font-semibold text-slate-900">{profile.email}</dd></div>
       </dl>
       <form onSubmit={save} className="space-y-2"><label htmlFor="profile-phone" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">Teléfono de contacto</label><div className="flex flex-wrap gap-2"><div className="relative flex-1 min-w-[12rem]"><Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" /><input id="profile-phone" type="tel" required maxLength={40} value={phone} onChange={(event) => { setPhone(event.target.value); setSaved(false); }} className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm" /></div><button type="submit" disabled={saving || unchanged} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar teléfono'}</button></div>{saved && <p role="status" className="text-xs text-emerald-700">Teléfono actualizado.</p>}</form>
+      <AffiliationSection />
     </>}
   </section>;
 }
